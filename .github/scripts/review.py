@@ -1,12 +1,12 @@
 import os
 import requests
-from google import genai
+from groq import Groq
 
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 PR_NUMBER    = os.environ["PR_NUMBER"]
 REPO         = os.environ["REPO"]
 
-client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 def get_pr_diff():
     url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}"
@@ -16,7 +16,7 @@ def get_pr_diff():
     }
     return requests.get(url, headers=headers).text
 
-def review_with_gemini(diff):
+def review_with_groq(diff):
     prompt = f"""You are an expert code reviewer. Review this git diff:
 
 1. **Summary** — what changed
@@ -27,12 +27,12 @@ def review_with_gemini(diff):
 Be concise and actionable. Diff:
 
 {diff[:8000]}"""
-    
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}]
     )
-    return response.text
+    return response.choices[0].message.content
 
 def post_comment(review):
     url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
@@ -45,6 +45,6 @@ def post_comment(review):
 
 if __name__ == "__main__":
     diff = get_pr_diff()
-    review = review_with_gemini(diff)
+    review = review_with_groq(diff)
     post_comment(review)
     print("Review posted!")
