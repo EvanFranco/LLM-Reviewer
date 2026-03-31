@@ -1,13 +1,12 @@
 import os
 import requests
-import google.generativeai as genai
+from google import genai
 
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
 PR_NUMBER    = os.environ["PR_NUMBER"]
 REPO         = os.environ["REPO"]
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 def get_pr_diff():
     url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}"
@@ -15,7 +14,7 @@ def get_pr_diff():
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.diff"
     }
-    return requests.get(url, headers=headers, timeout=10).text
+    return requests.get(url, headers=headers).text
 
 def review_with_gemini(diff):
     prompt = f"""You are an expert code reviewer. Review this git diff:
@@ -28,7 +27,12 @@ def review_with_gemini(diff):
 Be concise and actionable. Diff:
 
 {diff[:8000]}"""
-    return model.generate_content(prompt).text
+    
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt
+    )
+    return response.text
 
 def post_comment(review):
     url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
@@ -36,11 +40,11 @@ def post_comment(review):
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3+json"
     }
-    requests.post(url, headers=headers, json={"body": f"## AI Code Review\n\n{review}"}, timeout=10)
+    requests.post(url, headers=headers,
+        json={"body": f"## AI Code Review\n\n{review}"})
 
 if __name__ == "__main__":
     diff = get_pr_diff()
     review = review_with_gemini(diff)
     post_comment(review)
     print("Review posted!")
-
